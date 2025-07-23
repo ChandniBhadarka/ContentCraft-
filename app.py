@@ -180,21 +180,21 @@ if submit_button:
                 st.subheader("🖼️ Generated Images:")
                 
                 # Test OpenAI connection first
-                connection_ok, connection_msg = test_openai_connection()
-                if not connection_ok:
-                    st.error(f"OpenAI connection failed: {connection_msg}")
-                    if "proxies" in connection_msg:
-                        st.info("💡 **Solution**: Try running: `pip install --upgrade openai`")
-                    elif "authentication" in connection_msg.lower():
-                        st.info("💡 **Solution**: Check your OpenAI API key in apikey.py")
-                    st.warning("Skipping image generation due to connection issues.")
-                else:
-                    images_gallery = generate_images(blog_title, num_img)
+                # connection_ok, connection_msg = test_openai_connection()
+                # if not connection_ok:
+                #     st.error(f"OpenAI connection failed: {connection_msg}")
+                #     if "proxies" in connection_msg:
+                #         st.info("💡 **Solution**: Try running: `pip install --upgrade openai`")
+                #     elif "authentication" in connection_msg.lower():
+                #         st.info("💡 **Solution**: Check your OpenAI API key in apikey.py")
+                #     st.warning("Skipping image generation due to connection issues.")
+                # else:
+                #     images_gallery = generate_images(blog_title, num_img)
                     
-                    if images_gallery:
-                        carousel(items=images_gallery, width=1)
-                    else:
-                        st.warning("Could not generate images. Please try again.")
+                #     if images_gallery:
+                #         carousel(items=images_gallery, width=1)
+                #     else:
+                #         st.warning("Could not generate images. Please try again.")
             
             # Generate blog content
             st.subheader("📝 Your Generated Blog:")
