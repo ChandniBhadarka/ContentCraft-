@@ -2,14 +2,17 @@ import streamlit as st
 from google import genai
 from google.genai import types
 import os
-from openai import OpenAI
 from streamlit_carousel import carousel
+import base64
+import requests
+from io import BytesIO
+import urllib.parse
 
 # Try to import API keys
 try:
-    from apikey import google_gemini_api_key, openai_api_key
+    from apikey import google_gemini_api_key
 except ImportError:
-    st.error("❌ Could not import API keys. Please make sure 'apikey.py' file exists with your API keys.")
+    st.error("❌ Could not import API keys. Please make sure 'apikey.py' file exists with your Google Gemini API key.")
     st.stop()
 except Exception as e:
     st.error(f"❌ Error importing API keys: {str(e)}")
@@ -67,63 +70,93 @@ def generate_blog_content(blog_title, keywords, num_words):
         st.error(f"Error generating blog content: {str(e)}")
         return None
 
-def test_openai_connection():
-    """Test OpenAI API connection"""
-    try:
-        client = OpenAI(
-            api_key=openai_api_key,
-            timeout=30.0,
-            max_retries=1
-        )
-        # Try a simple API call to test connection
-        models = client.models.list()
-        return True, "OpenAI connection successful"
-    except Exception as e:
-        return False, str(e)
-
 def generate_images(blog_title, num_img):
-    """Generate images using OpenAI DALL-E"""
+    """Generate images using Unsplash API or create AI-generated image descriptions"""
     images_gallery = []
     
-    if not openai_api_key or openai_api_key.strip() == "":
-        st.error("OpenAI API key is not configured properly.")
+    if not google_gemini_api_key or google_gemini_api_key.strip() == "":
+        st.error("Google Gemini API key is not configured properly.")
         return []
     
     try:
-        # Initialize OpenAI client with explicit configuration
-        client = OpenAI(
-            api_key=openai_api_key,
-            timeout=60.0,  # Set timeout
-            max_retries=2   # Set max retries
-        )
+        # Initialize Gemini client for generating image concepts
+        gemini_client = genai.Client(api_key=google_gemini_api_key)
+        model = "gemini-2.0-flash-exp"
         
         for i in range(num_img):
             with st.spinner(f"Generating image {i+1} of {num_img}..."):
-                image_response = client.images.generate(
-                    model="dall-e-3",
-                    prompt=f"Generate a professional blog post image related to: {blog_title}. Make it visually appealing and relevant to the topic.",
-                    size="1024x1024",
-                    quality="standard",
-                    n=1
+                
+                # Generate relevant keywords for the image
+                keyword_prompt = f"Based on the blog title '{blog_title}', suggest 2-3 relevant keywords that would be good for finding stock photos. Return only the keywords separated by commas, no other text."
+                
+                contents = [
+                    types.Content(
+                        role="user",
+                        parts=[
+                            types.Part.from_text(text=keyword_prompt)
+                        ],
+                    ),
+                ]
+                
+                generate_content_config = types.GenerateContentConfig(
+                    response_mime_type="text/plain",
                 )
                 
-                new_image = single_image.copy()
-                new_image["title"] = f"Image {i+1}"
-                new_image["text"] = f"{blog_title}"
-                new_image["img"] = image_response.data[0].url
-                images_gallery.append(new_image)
+                response = gemini_client.models.generate_content(
+                    model=model,
+                    contents=contents,
+                    config=generate_content_config,
+                )
+                
+                if response and response.text:
+                    # Extract keywords and use them to get relevant images
+                    keywords = response.text.strip().replace(',', ' ').replace('\n', ' ')
+                    
+                    # Try to get image from Unsplash (free service)
+                    try:
+                        # Clean the keywords for URL
+                        search_query = urllib.parse.quote(keywords[:50])  # Limit length
+                        unsplash_url = f"https://source.unsplash.com/1200x800/?{search_query}"
+                        
+                        # Test if the URL is accessible
+                        response_test = requests.get(unsplash_url, timeout=10)
+                        if response_test.status_code == 200:
+                            image_url = unsplash_url
+                        else:
+                            # Fallback to a themed placeholder
+                            image_url = f"https://via.placeholder.com/1200x800/667eea/ffffff?text={urllib.parse.quote(f'Blog: {blog_title[:20]}...')}"
+                            
+                    except Exception:
+                        # Fallback to placeholder
+                        image_url = f"https://via.placeholder.com/1200x800/667eea/ffffff?text={urllib.parse.quote(f'Blog Image {i+1}')}"
+                    
+                    new_image = single_image.copy()
+                    new_image["title"] = f"Image {i+1}: {blog_title}"
+                    new_image["text"] = f"Generated for: {keywords}"
+                    new_image["img"] = image_url
+                    images_gallery.append(new_image)
+                    
+                else:
+                    # Simple fallback
+                    fallback_url = f"https://via.placeholder.com/1200x800/4a90e2/ffffff?text={urllib.parse.quote(f'Blog Image {i+1}')}"
+                    new_image = single_image.copy()
+                    new_image["title"] = f"Image {i+1}"
+                    new_image["text"] = f"Image for: {blog_title}"
+                    new_image["img"] = fallback_url
+                    images_gallery.append(new_image)
             
     except Exception as e:
         error_msg = str(e)
-        if "proxies" in error_msg:
-            st.error("Network configuration error. Try updating the OpenAI library: `pip install --upgrade openai`")
-        elif "api_key" in error_msg.lower():
-            st.error("Invalid OpenAI API key. Please check your API key configuration.")
-        elif "quota" in error_msg.lower():
-            st.error("OpenAI API quota exceeded. Please check your usage limits.")
-        else:
-            st.error(f"Error generating images: {error_msg}")
-        return []
+        st.error(f"Error generating images: {error_msg}")
+        
+        # Create fallback images even if there's an error
+        for i in range(num_img):
+            fallback_url = f"https://via.placeholder.com/1200x800/8b5cf6/ffffff?text={urllib.parse.quote(f'Blog Image {i+1}')}"
+            new_image = single_image.copy()
+            new_image["title"] = f"Image {i+1}"
+            new_image["text"] = f"Placeholder for: {blog_title}"
+            new_image["img"] = fallback_url
+            images_gallery.append(new_image)
         
     return images_gallery
 
@@ -134,16 +167,16 @@ st.set_page_config(
     layout="wide"
 )
 
-# Check if API keys are available
-if not google_gemini_api_key or not openai_api_key:
-    st.error("⚠️ API keys not found! Please check your apikey.py file.")
+# Check if API key is available
+if not google_gemini_api_key:
+    st.error("⚠️ Google Gemini API key not found! Please check your apikey.py file.")
     st.stop()
 
 # Main title
 st.title('✍️ ContentCraft: Your AI Writing Companion 🤖')
 
 # Subheader
-st.subheader("Craft your blog perfectly with the help of AI. ContentCraft is your new AI Blog Companion. 🖋️📖")
+st.subheader("Craft your blog perfectly with the help of AI. ContentCraft is your new AI Blog Companion powered by Google Gemini. 🖋️📖")
 
 # Sidebar for user input
 with st.sidebar:
@@ -151,10 +184,10 @@ with st.sidebar:
     st.subheader("Enter details of blog you want to generate 📝")
 
     # Blog title
-    blog_title = st.text_input("Blog Title", placeholder="Enter your blog title here...")
+    blog_title = st.text_input("Blog Title", placeholder="Enter your blog title here")
     
     # Keywords input
-    keywords = st.text_area("Enter Keywords (comma-separated)", placeholder="AI, technology, innovation...")
+    keywords = st.text_area("Enter Keywords (comma-separated)", placeholder="AI, technology, innovation..")
     
     # Number of words
     num_words = st.slider("Number of words", min_value=200, max_value=2000, step=100, value=800)
@@ -178,23 +211,13 @@ if submit_button:
             # Generate images if requested
             if num_img > 0:
                 st.subheader("🖼️ Generated Images:")
+                images = generate_images(blog_title, num_img)
                 
-                # Test OpenAI connection first
-                # connection_ok, connection_msg = test_openai_connection()
-                # if not connection_ok:
-                #     st.error(f"OpenAI connection failed: {connection_msg}")
-                #     if "proxies" in connection_msg:
-                #         st.info("💡 **Solution**: Try running: `pip install --upgrade openai`")
-                #     elif "authentication" in connection_msg.lower():
-                #         st.info("💡 **Solution**: Check your OpenAI API key in apikey.py")
-                #     st.warning("Skipping image generation due to connection issues.")
-                # else:
-                #     images_gallery = generate_images(blog_title, num_img)
-                    
-                #     if images_gallery:
-                #         carousel(items=images_gallery, width=1)
-                #     else:
-                #         st.warning("Could not generate images. Please try again.")
+                if images:
+                    # Display images in a carousel
+                    carousel(items=images, width=1.0)
+                else:
+                    st.warning("Could not generate images. Blog content will still be generated.")
             
             # Generate blog content
             st.subheader("📝 Your Generated Blog:")
@@ -215,4 +238,4 @@ if submit_button:
 
 # Footer
 st.markdown("---")
-st.markdown("**Note:** Make sure you have valid API keys for both OpenAI and Google Gemini configured in your `apikey.py` file.")
+st.markdown("**Note:** Make sure you have a valid Google Gemini API key configured in your `apikey.py` file with Imagen access enabled.")
