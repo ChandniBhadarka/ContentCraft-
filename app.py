@@ -17,7 +17,7 @@ try:
 except ImportError:
     DIFFUSERS_AVAILABLE = False
 
-# Try to import API keys
+
 try:
     from apikey import google_gemini_api_key, huggingface_api_key
 except ImportError:
@@ -40,7 +40,7 @@ def generate_blog_content(blog_title, keywords, num_words):
         # Configure the Gemini client
         gemini_client = genai.Client(api_key=google_gemini_api_key)
         
-        model = "gemini-2.0-flash-exp"  # Updated to a current model
+        model = "gemini-2.0-flash-exp" 
         
         contents = [
             types.Content(
@@ -66,7 +66,7 @@ def generate_blog_content(blog_title, keywords, num_words):
             response_mime_type="text/plain",
         )
         
-        # Generate content
+        
         response = gemini_client.models.generate_content(
             model=model,
             contents=contents,
@@ -82,11 +82,11 @@ def generate_blog_content(blog_title, keywords, num_words):
 def generate_image_prompt(blog_title, image_number):
     """Generate a detailed image prompt using Gemini API with fallback"""
     try:
-        # Check if API key exists
+       
         if not google_gemini_api_key or google_gemini_api_key.strip() == "":
             raise Exception("Google Gemini API key not found")
         
-        # Try to use Gemini API
+       
         gemini_client = genai.Client(api_key=google_gemini_api_key)
         model = "gemini-2.0-flash-exp"
         
@@ -119,21 +119,21 @@ def generate_image_prompt(blog_title, image_number):
         if response and response.text:
             return response.text.strip()
         else:
-            # Fallback if response is empty
+           
             raise Exception("Empty response from Gemini")
             
     except Exception as e:
-        # FALLBACK: Create a simple prompt without Gemini
+       
         print(f"Warning: Could not generate custom prompt with Gemini: {str(e)}")
         
-        # Create a good fallback prompt based on the blog title
+       
         fallback_prompts = {
             1: f"Professional illustration related to {blog_title}, high quality, detailed, masterpiece",
             2: f"Modern graphic design about {blog_title}, clean, professional, vibrant colors",
             3: f"Creative visualization of {blog_title}, artistic, professional, eye-catching"
         }
         
-        # Use image_number to get different prompts, default to 1 if out of range
+       
         prompt_key = image_number if image_number in fallback_prompts else 1
         
         return fallback_prompts[prompt_key]
@@ -154,7 +154,7 @@ def load_opendalle_model():
                 use_safetensors=True
             )
             
-            # Use CPU if CUDA is not available
+            
             if torch.cuda.is_available():
                 pipe = pipe.to("cuda")
                 st.success("✅ OpenDalle model loaded on GPU")
